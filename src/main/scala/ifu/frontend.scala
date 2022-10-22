@@ -330,13 +330,13 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   implicit val edge = outer.masterNode.edges.out(0)
   require(fetchWidth*coreInstBytes == outer.icacheParams.fetchBytes)
 
-  val bpd = Module(new BranchPredictor)
+  val bpd = Module(new BranchPredictor) // 分支预测期
   bpd.io.f3_fire := false.B
-  val ras = Module(new BoomRAS)
+  val ras = Module(new BoomRAS) // 返回地址栈
 
-  val icache = outer.icache.module
+  val icache = outer.icache.module // 指令cache
   icache.io.invalidate := io.cpu.flush_icache
-  val tlb = Module(new TLB(true, log2Ceil(fetchBytes), TLBConfig(nTLBSets, nTLBWays)))
+  val tlb = Module(new TLB(true, log2Ceil(fetchBytes), TLBConfig(nTLBSets, nTLBWays))) // TLB表
   io.ptw <> tlb.io.ptw
   io.cpu.perf.tlbMiss := io.ptw.req.fire
   io.cpu.perf.acquire := icache.io.perf.acquire
@@ -367,17 +367,18 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
     s0_tsrc    := BSRC_C
   }
 
-  icache.io.req.valid     := s0_valid
-  icache.io.req.bits.addr := s0_vpc
+  icache.io.req.valid     := s0_valid // 使能
+  icache.io.req.bits.addr := s0_vpc   // 虚拟地址pc
 
-  bpd.io.f0_req.valid      := s0_valid
-  bpd.io.f0_req.bits.pc    := s0_vpc
-  bpd.io.f0_req.bits.ghist := s0_ghist
+  bpd.io.f0_req.valid      := s0_valid // 使能
+  bpd.io.f0_req.bits.pc    := s0_vpc   // 虚拟地址pc
+  bpd.io.f0_req.bits.ghist := s0_ghist // TODO:  看到全局历史表后来补充
 
   // --------------------------------------------------------
   // **** ICache Access (F1) ****
   //      Translate VPC
   // --------------------------------------------------------
+  // 该阶段主要是负责将vpc访问tlb转化成ppc
   val s1_vpc       = RegNext(s0_vpc)
   val s1_valid     = RegNext(s0_valid, false.B)
   val s1_ghist     = RegNext(s0_ghist)
@@ -395,13 +396,13 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   tlb.io.sfence         := RegNext(io.cpu.sfence)
   tlb.io.kill           := false.B
 
-  val s1_tlb_miss = !s1_is_replay && tlb.io.resp.miss
-  val s1_tlb_resp = Mux(s1_is_replay, RegNext(s0_replay_resp), tlb.io.resp)
-  val s1_ppc  = Mux(s1_is_replay, RegNext(s0_replay_ppc), tlb.io.resp.paddr)
-  val s1_bpd_resp = bpd.io.resp.f1
+  val s1_tlb_miss = !s1_is_replay && tlb.io.resp.miss //TLB是否缺失
+  val s1_tlb_resp = Mux(s1_is_replay, RegNext(s0_replay_resp), tlb.io.resp)// TLB返回信息
+  val s1_ppc  = Mux(s1_is_replay, RegNext(s0_replay_ppc), tlb.io.resp.paddr)// TLB返回物理地址
+  val s1_bpd_resp = bpd.io.resp.f1 //分支预测返回信息
 
-  icache.io.s1_paddr := s1_ppc
-  icache.io.s1_kill  := tlb.io.resp.miss || f1_clear
+  icache.io.s1_paddr := s1_ppc // 获取到真实的物理地址
+  icache.io.s1_kill  := tlb.io.resp.miss || f1_clear // 如果f1需要clear或者tlb miss了，icache就停止访存
 
   val f1_mask = fetchMask(s1_vpc)
   val f1_redirects = (0 until fetchWidth) map { i =>
@@ -425,12 +426,12 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
     s1_vpc,
     false.B,
     false.B)
-
+    // 当tlb miss或者 s1_valid = false也就是分支预测错误需要背flush的时候，停止访问icache
   when (s1_valid && !s1_tlb_miss) {
     // Stop fetching on fault
     s0_valid     := !(s1_tlb_resp.ae.inst || s1_tlb_resp.pf.inst)
     s0_tsrc      := BSRC_1
-    s0_vpc       := f1_predicted_target
+    s0_vpc       := f1_predicted_target// 重新F0周期的虚拟地址设置为f1预测的地址
     s0_ghist     := f1_predicted_ghist
     s0_is_replay := false.B
   }

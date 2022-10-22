@@ -14,6 +14,7 @@ import boom.util.{BoomCoreStringPrefix}
 
 
 // A branch prediction for a single instruction
+// 对每一条指令预测包含的内容
 class BranchPrediction(implicit p: Parameters) extends BoomBundle()(p)
 {
   // If this is a branch, do we take it?
@@ -25,8 +26,6 @@ class BranchPrediction(implicit p: Parameters) extends BoomBundle()(p)
   val is_jal          = Bool()
   // What is the target of his branch/jump? Do we know the target?
   val predicted_pc    = Valid(UInt(vaddrBitsExtended.W))
-
-
 }
 
 // A branch prediction for a entire fetch-width worth of instructions
@@ -184,9 +183,6 @@ abstract class BranchPredictorBank(implicit p: Parameters) extends BoomModule()(
   val s1_update     = RegNext(s0_update)
   val s1_update_idx = RegNext(s0_update_idx)
   val s1_update_valid = RegNext(s0_update_valid)
-
-
-
 }
 
 

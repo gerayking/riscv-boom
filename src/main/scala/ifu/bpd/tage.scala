@@ -29,13 +29,13 @@ class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int, val uBitPer
 
   val nWrBypassEntries = 2
   val io = IO( new Bundle {
-    val f1_req_valid = Input(Bool())
-    val f1_req_pc    = Input(UInt(vaddrBitsExtended.W))
-    val f1_req_ghist = Input(UInt(globalHistoryLength.W))
+    val f1_req_valid = Input(Bool()) //handshake signal given at F1
+    val f1_req_pc    = Input(UInt(vaddrBitsExtended.W)) //PC of the instruction to be predicted given at F1
+    val f1_req_ghist = Input(UInt(globalHistoryLength.W))//Input from GHR at F1
 
-    val f3_resp = Output(Vec(bankWidth, Valid(new TageResp)))
+    val f3_resp = Output(Vec(bankWidth, Valid(new TageResp)))//Predictor response given at F3
 
-    val update_mask    = Input(Vec(bankWidth, Bool()))
+    val update_mask    = Input(Vec(bankWidth, Bool()))//IOs related to predictor tables' update
     val update_taken   = Input(Vec(bankWidth, Bool()))
     val update_alloc   = Input(Vec(bankWidth, Bool()))
     val update_old_ctr = Input(Vec(bankWidth, UInt(3.W)))
@@ -63,6 +63,7 @@ class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int, val uBitPer
     (idx, tag)
   }
 
+  // pred 域自增
   def inc_ctr(ctr: UInt, taken: Bool): UInt = {
     Mux(!taken, Mux(ctr === 0.U, 0.U, ctr - 1.U),
                 Mux(ctr === 7.U, 7.U, ctr + 1.U))
@@ -86,22 +87,26 @@ class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int, val uBitPer
 
   val (s1_hashed_idx, s1_tag) = compute_tag_and_hash(fetchIdx(io.f1_req_pc), io.f1_req_ghist)
 
+  //usefulness 有两位， BOOM中将其拆分成了高位和底位存储
   val hi_us  = SyncReadMem(nRows, Vec(bankWidth, Bool()))
   val lo_us  = SyncReadMem(nRows, Vec(bankWidth, Bool()))
+  // Tagetable表
   val table  = SyncReadMem(nRows, Vec(bankWidth, UInt(tageEntrySz.W)))
 
   val mems = Seq((f"tage_l$histLength", nRows, bankWidth * tageEntrySz))
 
   val s2_tag       = RegNext(s1_tag)
 
+  // 根据hash值去读取对应的内容
   val s2_req_rtage = VecInit(table.read(s1_hashed_idx, io.f1_req_valid).map(_.asTypeOf(new TageEntry)))
   val s2_req_rhius = hi_us.read(s1_hashed_idx, io.f1_req_valid)
   val s2_req_rlous = lo_us.read(s1_hashed_idx, io.f1_req_valid)
+  // 通过该`tag == s2_tag`来判断是否命中
   val s2_req_rhits = VecInit(s2_req_rtage.map(e => e.valid && e.tag === s2_tag && !doing_reset))
 
   for (w <- 0 until bankWidth) {
     // This bit indicates the TAGE table matched here
-    io.f3_resp(w).valid    := RegNext(s2_req_rhits(w))
+    io.f3_resp(w).valid    := RegNext(s2_req_rhits(w)) // 不命中则为false无效
     io.f3_resp(w).bits.u   := RegNext(Cat(s2_req_rhius(w), s2_req_rlous(w)))
     io.f3_resp(w).bits.ctr := RegNext(s2_req_rtage(w).ctr)
   }
@@ -177,8 +182,6 @@ class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int, val uBitPer
       wrbypass_enq_idx := WrapInc(wrbypass_enq_idx, nWrBypassEntries)
     }
   }
-
-
 
 }
 
