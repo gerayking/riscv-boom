@@ -171,10 +171,10 @@ class RenameStage(
     val bypassed_uop = Wire(new MicroOp)
     bypassed_uop := uop
 
-    val bypass_hits_rs1 = (older_uops zip alloc_reqs) map { case (r,a) => a && r.ldst === uop.lrs1 }
-    val bypass_hits_rs2 = (older_uops zip alloc_reqs) map { case (r,a) => a && r.ldst === uop.lrs2 }
-    val bypass_hits_rs3 = (older_uops zip alloc_reqs) map { case (r,a) => a && r.ldst === uop.lrs3 }
-    val bypass_hits_dst = (older_uops zip alloc_reqs) map { case (r,a) => a && r.ldst === uop.ldst }
+    val bypass_hits_rs1 = (older_uops zip alloc_reqs) map { case (r,a) => a && r.ldst === bypassed_uop.lrs1 }
+    val bypass_hits_rs2 = (older_uops zip alloc_reqs) map { case (r,a) => a && r.ldst === bypassed_uop.lrs2 }
+    val bypass_hits_rs3 = (older_uops zip alloc_reqs) map { case (r,a) => a && r.ldst === bypassed_uop.lrs3 }
+    val bypass_hits_dst = (older_uops zip alloc_reqs) map { case (r,a) => a && r.ldst === bypassed_uop.ldst }
 
     val bypass_sel_rs1 = PriorityEncoderOH(bypass_hits_rs1.reverse).reverse
     val bypass_sel_rs2 = PriorityEncoderOH(bypass_hits_rs2.reverse).reverse
